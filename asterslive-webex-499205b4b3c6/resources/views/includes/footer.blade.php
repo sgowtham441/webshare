@@ -1,0 +1,1 @@
+<div class="panel-footer">&copy; 2015 Asters Creation All Rights Reserved</div>
