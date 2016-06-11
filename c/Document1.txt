@@ -1,0 +1,8 @@
+db().last();
+db({column:value}).get(); - is like select * from table where column = value
+db.insert({model:'New Model',os:'New OS',version:'New Version'});
+db({model:"test"}).update({os:"New OS"});
+
+===========
+var c = TAFFY();
+c.store("contact");

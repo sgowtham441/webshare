@@ -1,0 +1,669 @@
+<?php
+if( $_GET["id"] )
+{
+
+$usr_id = $_GET["id"];
+
+}
+
+$e = <<<EOD <!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Remote share</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<link href="style.css" rel="stylesheet">
+<script type="text/javascript" src="jquery-1.11.3.min.js"></script>
+<script src='bootstrap/js/bootstrap.min.js'></script>
+<script type="text/javascript" src="variable.js"></script>
+<script type="text/javascript" src="Queue.js"></script>
+<script type="text/javascript" src="taffy-min.js"></script>
+</head>
+<body>
+<div class="container-fluid">
+<div class="row">
+  <div  style="width:85%">
+  	</div><div id="cantv" style="width:80%"> <canvas id="remoteconnect" style="width:100%"> </canvas></div>
+  	<div class="video-chat">
+  		<div class="video-left">
+  			<p>Product name</p>
+  		</div>
+  		<div class="video-right">
+  			<img src="images/logo.jpg">
+  		</div>
+  	</div>
+  </div>
+  <div style="width:15%">
+	  <div class="chat">
+	  	<div class="chat-history">
+	  		<h3 class="chat-head">Live Chat</h3>
+	  		<div class="from-chat">
+	  			<img src="images/images.png">
+	  			<p>This msg sent from me</p>
+	  		</div>
+	  		<div class="recev-chat">
+	  			<img src="images/images.png">
+	  			<p>This msg sent from others</p>
+	  		</div>
+
+	  	</div>
+	  	<form action="" method="post">
+	  		<select id="user-select">
+	  			<option value="all">All</option>
+	  			<option value="">Ramu</option>
+	  			<option value="">Setha</option>
+	  			<option value="">Sargunan</option>
+	  		</select>
+	  		<textarea id="chat-text"></textarea>
+	  		<input type="submit" value="send" id="send-chat">
+	  	</form>
+
+	  </div>
+  </div>
+</div>
+</div>
+
+<script>
+
+console.log($usr_id);
+var atv = document.getElementById('cantv');
+var tv = document.getElementById('remoteconnect');
+var queue = new Queue();
+var uqueue = new Queue();
+var lchat = new Queue();
+var reader = new FileReader();
+var rend = true;
+var ureader = new FileReader();
+var urend = true;
+var can_tv = tv.getContext('2d');
+var im = new Image();
+var h = 0;
+var w = 0;
+var usoc_stat = false;
+var bsoc_stat = false;
+var usock;
+var bsock;
+var uid;
+var bid;
+var ustat;
+var uname;
+var chatdb = TAFFY();
+chatdb.store("chatdb");
+var usrdb = TAFFY();
+usrdb.store("usrdb");
+
+var mouseEventFlag=0;
+
+
+function message(msg){
+           $('#log').append(msg+'</p>');
+         }
+
+function ucon(){
+
+ try{
+
+ 	var host = "ws://192.168.1.123:8080/SUB1000000000000001-1000000000000001";
+   	usock = new WebSocket(host);
+
+
+    usock.onopen = function()
+    {
+
+         console.log('Unicast Socket :'+usock.readyState);
+    }
+
+
+    usock.onmessage = function(msg)
+    {
+    	console.log('data received');
+   	    uqueue.enqueue(msg.data);
+    }
+
+    usock.onclose = function()
+    {
+
+       console.log('Unicast Socket Closed');
+       usoc_stat = false;
+    }
+
+    usock.onerror = function(e)
+    {
+  	  console.log('Unicast Socket Error');
+  	  usoc_stat = false;
+
+    }
+
+    }
+ catch(exception)
+ {
+     console.log('Unicast Socket Exception'+exception);
+     usoc_stat = false;
+     usock.close();
+ }
+}
+
+
+function bcon()
+{
+   try
+   {
+
+      var bsock = new WebSocket("ws://192.168.1.123:8080/SUB1000000000000000-1000000000000001");
+      bsock.binaryType = 'blob';
+      //ws.binaryType = "arraybuffer";
+
+      bsock.onopen = function()
+      {
+    	 con1 = true
+         var toId='1000000000000002';
+		 var requestUserData=toId;
+		 usock.send(requestUserData+'NIMG');
+         console.log("Broadcast Socket:"+bsock.readyState);
+      };
+
+
+      bsock.onmessage = function (evt)
+      {
+      console.log('data received');
+   	  queue.enqueue(evt.data);
+   	  //console.log(queue.getLength());
+
+      };
+
+      bsock.onclose = function()
+      {
+         console.log("Broadcast Socket Closed");
+         bsoc_stat = false;
+
+      };
+
+      bsock.onerror = function(e)
+      {
+    	  console.log('Broadcast Socket Error'+e)
+    	  bsoc_stat = false;
+
+      }
+
+   }
+
+   catch(exception)
+   {
+	   console.log('Broadcast Socket Exception:'+exception);
+       bsoc_stat = false;
+       bsock.close();
+   }
+}
+
+
+
+
+
+function udesk()
+{
+			if (urend === true & uqueue.isEmpty() === false)
+			{
+   			  reader.onload = function(e)
+           	  {
+           	    //console.log('>>>>>>')
+           	    var d = e.target.result;
+           	    var a = d.slice(0,16);
+           	    var f = d.slice(16,20);
+           	    //console.log('ADDRESS:'+a+' FUNCTION:'+f);
+
+
+           	    if ( f === 'BEAT')
+           	    {
+					var dd = d.slice(20);
+					var usr_id = d.slice(0,16);
+					dd = dd.split('|');
+					if (dd[0] === 'HAII')
+					{
+
+						var usr_stat = dd[1];
+						var usr_name = dd[2];
+						try{if(usock.readyState === 1){usock.send(bid+'BEAT|HELO|'+ustat+'|'+uname);usock.send(usr_id+'BEAT|HELO|'+ustat+'|'+uname);}}catch(err){}
+					}
+					else if (dd[0] == 'HELO')
+					{
+                      var usr_stat = dd[1];
+                      var usr_name = dd[2];
+
+
+					}
+           	    }
+           	   else if (f === 'CHAT')
+           	   {
+           	    var usr_id = d.slice(0,16);
+				var dd = d.slice(20);
+				dd = dd.split('|');
+				chat_id = dd[0];
+				chat_msg = dd[1];
+
+
+           	   }
+
+           	  urend = true
+           	  };
+           	 urend = false
+           	 ureader.readAsText(uqueue.dequeue());
+           	 }
+
+}
+
+
+function bdesk()
+{
+				if (rend === true & queue.isEmpty() === false)
+			   {
+   			  reader.onload = function(e)
+           	  {
+           	    //console.log('>>>>>>')
+           	    var d = e.target.result;
+           	    var a = d.slice(0,16);
+           	    var f = d.slice(16,20);
+           	    //console.log('ADDRESS:'+a+' FUNCTION:'+f);
+
+           	    if (f === 'DESK')
+           	     {
+
+           	       d = d.slice(20);
+           	       xy = d.split('|',2);
+           	       l = xy[0].length+xy[1].length+2;
+           	       d = d.slice(l);
+           	       var j = "data:image/jpeg;base64,"+d;
+           	       im.src = j;
+           	       if (im.height > h | im.width > w )
+           	       {
+           	    	   h = im.height;
+           	    	   w = im.width;
+           	    	   tv.width = w;
+           	    	   tv.height = h;
+           	    	   console.log(tv.width+'-'+tv.height)
+           	       }
+           	       //console.log(xy[0]+'-'+xy[1]+'-'+im.width+'-'+im.height)
+           	       im.onload = function(){can_tv.drawImage(im,xy[0],xy[1]);}
+           	       //console.log('>>>>>>>>>>>>>>>>>>>>>')
+           	     }
+           	    else if ( f === 'BEAT')
+           	    {
+					var dd = d.slice(20);
+					var usr_id = d.slice(0,16);
+					dd = dd.split('|');
+					if (dd[0] === 'HAII')
+					{
+
+						var usr_stat = dd[1];
+						var usr_name = dd[2];
+						try{if(bsock.readyState === 1){usock.send(bid+'BEATHELO|'+ustat+'|'+uname);bsock.send(usr_id+'BEAT|HELO|'+ustat+'|'+uname);}}catch(err){}
+					}
+					else if (dd[0] == 'HELO')
+					{
+                      var usr_stat = dd[1];
+                      var usr_name = dd[2];
+
+					}
+           	    }
+           	  else if ( f === 'CHAT')
+           	  {
+           		var dd = d.slice(20);
+				var usr_id = d.slice(0,16);
+				dd = dd.split('|');
+				var chat_id = dd[0];
+				var chat = dd[1];
+           	  }
+
+
+           	  rend = true
+           	  };
+           	 rend = false
+           	 reader.readAsText(queue.dequeue());
+           	 }
+
+}
+
+function chatsnd(a)
+{
+	lchat.enqueue(a);
+}
+
+function chatchk()
+{
+	if (lchat.isEmpty() === false)
+	{
+	    if (usock.readyState === 1)
+	    {
+	    	var a = lchat.dequeue();
+	    	var cid = chatdb({'to':a['to']}).last()['cid']
+	    	try
+	    	{
+	    		if (cid == 'undefined')
+	    		{
+	    		 cid = 1;
+	    		}
+	    		else
+	    		{
+	    		 cid = cid + 1;
+	    		}
+	    		usock.send(a['to']+'CHAT'+cid+'|'+a['chat'])
+	    		chatdb.insert({'cid':cid,'to':a[to],'chat':a['chat'],'status':'0'});
+	    	}
+	    	catch (err)
+	    	{
+	    		console.log(err)
+	    		lchat.enqueue(a);
+	    	}
+	    	
+	    }
+		
+	
+	}
+
+}
+
+function sock_chk()
+{
+	if (usoc_stat === false)
+	{
+	 ucon();
+     usoc_stat = true;
+	}
+
+	if (bsoc_stat === false)
+	{
+	 bcon();
+	 bsoc_stat = true;
+	}
+}
+
+setInterval(bdesk,0);
+setInterval(udesk,0);
+setInterval(sock_chk,3000);
+setInterval(chatchk,5000);
+
+
+
+
+
+$(document).ready(function(){
+ var clickMouseEvent='0',delay = 500,mouseEventUpDown = '0',userPremission="pending";
+   var keyboardPressEvent='0',keyUpDown='0';
+var brocastFlag='1';
+var toId='1000000000000002';
+var fromId='1000000000000001';
+var requestUserData=toId;
+
+var pad="0000";
+$('#remoteconnect').on("mouseenter", function(e) {
+     mouseEventFlag=1;
+});
+$('#remoteconnect').on("mouseleave", function(e) {
+     mouseEventFlag=0;
+});
+
+$(document).on( "keydown", function(event) {
+
+ if(mouseEventFlag==1){
+  event.preventDefault();
+ var text=arrayValue[event.which];
+ var KeyboardEventText=requestUserData+'KCLKDOWN|'+text;
+ usock.send(KeyboardEventText);
+ //console.log(KeyboardEventText);
+ return false;
+ }
+})
+.on( "keyup", function(event) {
+ if(mouseEventFlag==1){
+   event.preventDefault();
+   var text= arrayValue[event.which];
+   var KeyboardEventText=requestUserData+'KCLKUP|'+text;
+   usock.send(KeyboardEventText);
+   //console.log(KeyboardEventText);
+   return false;
+ }
+
+});
+
+		$('#remoteconnect').on("mousemove", function(e) {
+      if(userPremission=='pending' || userPremission=='process'){
+                           return true; }
+      var offset = $(this).offset();
+	  var X = ((e.clientX) - offset.left);
+      var Y = ((e.clientY) - offset.top);
+      //console.log(e.pageX+'-'+e.pageY+'>'+offset.left+'-'+offset.top);
+      //console.log(e.pageY);
+
+      //var nx = tv.width - X ;
+      console.log('X = '+X+'-'+Y+'>'+atv.offsetWidth+'-'+atv.offsetHeight)
+
+      X = X * (tv.width / atv.offsetWidth );
+      Y = Y * (tv.height / atv.offsetHeight );
+      //console.log('NewX = '+X)
+      var XX=""+Math.round(X);
+      var YY=""+Math.round(Y);
+      var XXX=pad.substring(0,pad.length-XX.length)+XX;
+      var YYY=pad.substring(0,pad.length-YY.length)+YY;
+      if(XXX > -1 && YYY > -1){
+         var mouseMoveEventText=requestUserData+'MOUS'+XXX+'|'+YYY;
+         usock.send(mouseMoveEventText);
+         //console.log(XX+" | "+YY);
+     }else{
+      console.log('Out Side Mouse Move: ' +mouseMoveEventText);
+     }
+
+});
+
+
+
+
+function keyEventModification(keycodeValue){
+if(keycodeValue==0)
+   return 1;
+ else if(keycodeValue==1)
+   return 3;
+ else
+   return 2;
+}
+$('#remoteconnect')
+                  .mousedown(function (e) {
+                      if(userPremission=='pending' || userPremission=='process'){
+                           return true; }
+                               var offset = $(this).offset();
+                               var X = ((e.pageX*1) - offset.left);
+                               var Y = ((e.pageY*1) - offset.top);
+                               X = X * (tv.width / atv.offsetWidth );
+                               Y = Y * (tv.height / atv.offsetHeight );
+                               var XX=""+X;
+                               var XXX=pad.substring(0,pad.length-XX.length)+XX;
+                               var YY=""+Y;
+                               var YYY=pad.substring(0,pad.length-YY.length)+YY;
+                               var XXX=""+Math.floor(XXX);
+                               var YYY=""+Math.floor(YYY);
+                       setTimeout(function() {
+                           if(clickMouseEvent=='0'){
+                             mouseEventUpDown='1';
+                             /*Mouse Down Event*/
+                               if(XXX > -1 && YYY > -1){
+                                 var mouseMoveEventText=requestUserData+'MCLK'+XXX+'|'+YYY+'|DOWN|'+keyEventModification(e.button);
+                                 usock.send(mouseMoveEventText);
+                                 //console.log(mouseMoveEventText);
+                               }else{
+                                  console.log('Out Side Mouse Move: ' +mouseMoveEventText);
+                               }
+
+
+
+
+                            }
+                       }, delay);
+
+                   })
+                  .mouseup(function (e) {
+                     if(userPremission=='pending' || userPremission=='process'){
+                           return true;  }
+                               var offset = $(this).offset();
+                               var X = ((e.pageX*1) - offset.left);
+                               var Y = ((e.pageY*1) - offset.top);
+                               X = X * (tv.width / atv.offsetWidth );
+                               Y = Y * (tv.height / atv.offsetHeight );
+                               var XX=""+X;
+                               var XXX=pad.substring(0,pad.length-XX.length)+XX;
+                               var YY=""+Y;
+                               var YYY=pad.substring(0,pad.length-YY.length)+YY;
+                               var XXX=""+Math.floor(XXX);
+                               var YYY=""+Math.floor(YYY);
+                     setTimeout(function() {
+                       if(mouseEventUpDown == '1' && clickMouseEvent=='0'){
+                          mouseEventUpDown='0';
+                          //console.log('Up');
+                          /* Mouse Up Event*/
+                              if(XXX > -1 && YYY > -1){
+                                 var mouseMoveEventText=requestUserData+'MCLK'+XXX+'|'+YYY+'|UP|'+keyEventModification(e.button);
+                                 usock.send(mouseMoveEventText);
+                                 //console.log(mouseMoveEventText);
+                               }else{
+                                  console.log('Out Side Mouse Move: ' +mouseMoveEventText);
+                               }
+
+
+                       }else{
+                         if(clickMouseEvent!='2'){
+                             clickMouseEvent='1';
+                             /*Mouse Click Event*/
+                               if(XXX > -1 && YYY > -1){
+                                 var mouseMoveEventText=requestUserData+'MCLK'+XXX+'|'+YYY+'|SCLK|'+keyEventModification(e.button);
+                                 usock.send(mouseMoveEventText);
+                                 //console.log(mouseMoveEventText);
+                               }else{
+                                  console.log('Out Side Mouse Move: ' +mouseMoveEventText);
+                               }
+                         }
+                       }
+                     }, 250);
+                      setTimeout(function() {
+                         clickMouseEvent='0';
+                      }, 700);
+                  })
+                 .dblclick(function (e) {
+                   if(userPremission=='pending' || userPremission=='process'){
+                           return true; }
+                    clickMouseEvent='2';
+                    /*Mouse Double Click Event*/
+                               var offset = $(this).offset();
+                               var X = ((e.pageX*1) - offset.left);
+                               var Y = ((e.pageY*1) - offset.top);
+                               X = X * (tv.width / atv.offsetWidth );
+                               Y = Y * (tv.height / atv.offsetHeight );
+                               var XX=""+X;
+                               var XXX=pad.substring(0,pad.length-XX.length)+XX;
+                               var YY=""+Y;
+                               var YYY=pad.substring(0,pad.length-YY.length)+YY;
+                               var XXX=""+Math.floor(XXX);
+                               var YYY=""+Math.floor(YYY);
+                               if(XXX > -1 && YYY > -1){
+                                 var mouseMoveEventText=requestUserData+'MCLK'+XXX+'|'+YYY+'|DCLK|'+keyEventModification(e.button);
+                                 usock.send(mouseMoveEventText);
+                                 //console.log(mouseMoveEventText);
+                               }else{
+                                  console.log('Out Side Mouse Move: ' +mouseMoveEventText);
+                               }
+
+                   });
+
+
+                $('#remoteconnect').bind('mousewheel', function(e){
+                     if(e.originalEvent.wheelDelta /120 > 0) {
+
+
+                               var offset = $(this).offset();
+                               var X = ((e.pageX*1) - offset.left);
+                               var Y = ((e.pageY*1) - offset.top);
+                               X = X * (tv.width / atv.offsetWidth );
+                               Y = Y * (tv.height / atv.offsetHeight );
+                               var XX=""+X;
+                               var XXX=pad.substring(0,pad.length-XX.length)+XX;
+                               var YY=""+Y;
+                               var YYY=pad.substring(0,pad.length-YY.length)+YY;
+                               var XXX=""+Math.floor(XXX);
+                               var YYY=""+Math.floor(YYY);
+                               if(XXX > -1 && YYY > -1){
+                                var mouseMoveEventText=requestUserData+'MCLK'+XXX+'|'+YYY+'|UP|4';
+                                 usock.send(mouseMoveEventText);
+                                 //console.log(mouseMoveEventText);
+                               }
+                     }
+                     else{
+
+
+                               var offset = $(this).offset();
+                               var X = ((e.pageX*1) - offset.left);
+                               var Y = ((e.pageY*1) - offset.top);
+                               X = X * (tv.width / atv.offsetWidth );
+                               Y = Y * (tv.height / atv.offsetHeight );
+                               var XX=""+X;
+                               var XXX=pad.substring(0,pad.length-XX.length)+XX;
+                               var YY=""+Y;
+                               var YYY=pad.substring(0,pad.length-YY.length)+YY;
+                               var XXX=""+Math.floor(XXX);
+                               var YYY=""+Math.floor(YYY);
+                               if(XXX > -1 && YYY > -1){
+                                var mouseMoveEventText=requestUserData+'MCLK'+XXX+'|'+YYY+'|DOWN|4';
+                                 usock.send(mouseMoveEventText);
+                                 //console.log(mouseMoveEventText);
+                               }
+
+                     }
+                     return false;
+                 });
+
+                 $('#remoteconnect').click(function () {
+
+                   if(userPremission=='pending' && userPremission !='process'){
+                     userPremission='Accepted';
+                     var txt;
+                     var r = confirm("Are you want to send the request?");
+                     if (r == true) {
+                       usock.send(requestUserData+'RCNT');
+                           alert("You pressed OK!");
+                       } else {
+                           alert("Request Canceled");
+                       }
+                     return true;
+                   }
+
+                   });
+
+      $('#remoteconnect').on("contextmenu",function(){
+      return false;
+      });
+
+	});
+
+
+
+
+
+//reader.onloadstart = printEventType;
+//reader.onprogress = printEventType;
+//reader.onload = printEventType;
+//reader.onloadend = printEventType;
+
+function printEventType(event)
+{
+console.log('got event: ' + event.type);
+}
+
+
+
+
+</script>
+
+
+</body>
+</html>
+EOD;
+
+echo $e;
+?>
